@@ -13,13 +13,13 @@ library(RColorBrewer)
 champinfo <- fromJSON("http://ddragon.leagueoflegends.com/cdn/10.21.1/data/en_US/champion.json")
 
 
-api_key <- "RGAPI-9aebb144-01f2-4983-82aa-304727fd8cee"
+source("authentication.R")
 name <- "Zwieee"
 base_url <- "https://euw1.api.riotgames.com"
 sumname_url <- "/lol/summoner/v4/summoners/by-name/"
 
 #fetch data from summoner name
-name_data <- fromJSON(GetRiot(name = "Zwieee", base_url, property_url = sumname_url, api_key))
+name_data <- fromJSON(GetRiot(name = name, base_url, property_url = sumname_url, api_key))
  
 
 
@@ -35,7 +35,7 @@ champ_name_id <- lapply(champinfo$data, "[", c(2,3))
 
 #get name of the champ from mastery id
 fav_data <- mastery_data[[1]]
-#returns TRUE for id matches
+#returns TRUE for champion id matches
 fav_logic <- !is.na(match(lapply(champ_name_id,"[[",2),fav_data$championId))
 champ_names <- names(champ_name_id)
 fav_champ <- champ_names[fav_logic]
