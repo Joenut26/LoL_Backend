@@ -30,9 +30,6 @@ sumname_url <- "/lol/summoner/v4/summoners/by-name/"
 
 name_data <- fromJSON(GetRiot(name = sum_name_input, base_url, property_url = sumname_url, api_key))
 
-
-
-
 #fetch mastery
 
 mastery_url <- "/lol/champion-mastery/v4/champion-masteries/by-summoner/"
@@ -60,59 +57,46 @@ fav_name <- paste0("champion=", fav_champ_id,queues)
 match_data <- fromJSON(GetRiot(name = name_data$accountId, base_url, match_url, api_key, props = fav_name ))
 
 #get match ids
-match_id_list <- unlist(lapply(match_data$matches, "[", 2))
+match_id <- unlist(lapply(match_data$matches, "[", 2))
 
 match_id_url <- "/lol/match/v4/matches/"
-match_data_fav <-  lapply(match_id_list, function(x){GetRiot(x, base_url, match_id_url, api_key)})
-
-
-
-
+match_data_fav <-  lapply(match_id, function(x){GetRiot(x, base_url, match_id_url, api_key)})
 
 #only recent 10 games on the champ because R is fucking slow
 match_data_ten <- match_data_fav[c(1:10)]
 match_data_recent <-  lapply(match_data_ten, function(x){temp = fromJSON(x)})
 
-player_names <- lapply(match_data_recent,"[", "participantIdentities")
+#winrate/kda function
+gamestats_fav <- KDA(match_data_recent,input_name = sum_name_input)
 
+#most recent stats
+#convert current time to unix timestamp in ms
+time_current <-as.numeric(Sys.time())*1000 
+#set begin time to 30 days prior
+time_begin <- round(time_current - 2592000000)
+vars <- paste0(queues,"&beginTime=",time_begin,"&endIndex=100")
 
-participant_df_rows <- data.frame()
-participant_list <- list()
+recent_match_data <- fromJSON(GetRiot(name = name_data$accountId, base_url, match_url, api_key, props = vars))
+recent_match_id<- unlist(lapply(recent_match_data$matches, "[", 2))
+match_data_month <- lapply(recent_match_id, function(x){fromJSON(GetRiot(x, base_url, match_id_url, api_key))})
 
-for (i in 1:length(player_names)){
-  int <- which(lapply(lapply(player_names[[i]]$participantIdentities, "[[",2), "[[",3) == sum_name_input)
-  #combine name and participant id in dataframe per game
-  bind_df <- data.frame("participantID" = player_names[[i]]$participantIdentities[[int]]$participantId,
-                        "participantName" = player_names[[i]]$participantIdentities[[int]]$player$summonerName,
-                        "teamID" = match_data_recent[[i]]$participants[[int]]$teamId,
-                        "kda" = (match_data_recent[[i]]$participants[[int]]$stats$kills + 
-                                 match_data_recent[[1]]$participants[[int]]$stats$assists)/
-                                 match_data_recent[[1]]$participants[[int]]$stats$deaths)
-  
-  participant_df_rows <- rbind(participant_df_rows,bind_df)
-  
-  #win or loss
-  outcome <- !is.na(match(participant_df_rows$teamID,match_data_recent[[i]]$teams[[1]]$teamId))
-  outcome <- ifelse(outcome,match_data_recent[[i]]$teams[[1]]$win,match_data_recent[[i]]$teams[[2]]$win)
-  
-  participant_df_rows <- cbind(participant_df_rows,outcome)
-  
-  temp <- list("data" = participant_df_rows)
-  participant_list[[i]] <- temp$data
-  names(participant_list)[i] <- paste0("gamenumber",i)
-  #reset participant_df_rows
-  participant_df_rows <- data.frame()
+gamestats_recent <- KDA(match_data_month,sum_name_input)
+
+gamestat_df <- rbindlist(gamestats_recent$player)
+champ_count <- as.data.frame(table(gamestat_df$champID))
+sorted <- champ_count[order(champ_count$Freq,decreasing = TRUE),]
+recent_3_champ <- sorted[1:3,1]
+r3_names <- champ_name_id$id[match(recent_3_champ,champ_name_id$key)]
+recent_3_played <- sorted[1:3,2]
+recent_3c <- gamestat_df[gamestat_df$champID %in% recent_3_champ]
+
+kda_recent <- NULL
+win_rate_recent <- NULL
+for(i in 1:length(recent_3_champ)){
+kda_recent[i] <- sum(recent_3c$kda[recent_3c$champID == recent_3_champ[i]])/recent_3_played[i]
+win_logic <- !is.na(match(recent_3c$outcome[recent_3c$champID == recent_3_champ[i]],"Win"))
+win_rate_recent[i] <- sum(ifelse(win_logic,1,0))/recent_3_played[i]*100
 }
-
-#which(...) = row c(2,4) = colums
-results <- lapply(participant_list, function(x){x[which(x$participantName == sum_name_input),c(2,5)]})
-
-results_logic <- unlist(lapply(results,function(x){x$outcome == "Win"}))
-#winrate
-winrate <- sum(results_logic, na.rm = TRUE)/length(results_logic)*100
-#kda
-kda_avg <-sum(unlist(lapply(participant_list,"[[",4)))/length(results_logic)
-  
   
   #ranking
   
@@ -174,12 +158,13 @@ players <- list("name" = sum_name_input,
                 "rank_tier" = rank_tier_div,
                 "fav_champ" = fav_data$championId[1],
                 "mastery_fav" = fav_data$championPoints[1],
-                "winrate" = winrate,
+                "winrate" = gamestats_fav$winrate,
                 "games_played_fav" = lenght(match_data_ten),
-                "kda_fav" = kda_avg,
-                "top_3_champs_recent" = 
-                  
-                  
+                "kda_fav" = gamestats_fav$KDA,
+                "top_3_champs_recent" = r3_names,
+                "top_3_champs_games_recent" = recent_3_played,
+                "top_3_champs_winrate_recent" = win_rate_recent,
+                "top_3_champs_kda_recent" = kda_recent
 )
 
 #}
