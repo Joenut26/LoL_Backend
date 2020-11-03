@@ -7,12 +7,17 @@ KDA <- function(data,input_name){
   
   participant_df_rows <- data.frame()
   participant_list <- list()
-  for (i in 1:length(match_data_month)){
+  
+  for (i in 1:length(data)){
     #get names
     player_names <- lapply(data,"[", "participantIdentities")
     #find entries for inputname only
 
     int <- which(lapply(lapply(player_names[[i]]$participantIdentities, "[[",2), "[[",3) == input_name)
+    
+    if(data[[i]]$participants[[int]]$stats$deaths == 0){
+      data[[i]]$participants[[int]]$stats$deaths <- 1
+    }
     #combine name and participant id in dataframe per game
     bind_df <- data.frame("participantID" = player_names[[i]]$participantIdentities[[int]]$participantId,
                           "participantName" = player_names[[i]]$participantIdentities[[int]]$player$summonerName,
@@ -39,6 +44,7 @@ KDA <- function(data,input_name){
   }
   
   results <- lapply(participant_list, function(x){x[which(x$participantName == input_name),c(2,ncol(bind_df)+1)]})
+  #won game returns TRUE
   results_logic <- unlist(lapply(results,function(x){x$outcome == "Win"}))
   #winrate
   winrate <- sum(results_logic, na.rm = TRUE)/length(results_logic)*100
